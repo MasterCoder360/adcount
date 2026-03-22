@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Adhan Countdown</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0b132b;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#countdown {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 4rem;
+}
+
+#nextPrayer {
+  font-size: 2rem;
+}
+
+#prayers {
+  display: flex;
+  justify-content: space-around;
+  padding: 20px;
+  background: #1c2541;
+}
+
+.prayer {
+  background: #3a506b;
+  padding: 15px;
+  border-radius: 10px;
+  width: 18%;
+  text-align: center;
+}
+</style>
+</head>
+
+<body>
+
+<div id="countdown">
+  <div id="nextPrayer">Loading...</div>
+  <div id="timer">--:--:--</div>
+</div>
+
+<div id="prayers">
+  <div class="prayer"><h3>Fajr</h3><p id="fajr"></p></div>
+  <div class="prayer"><h3>Dhuhr</h3><p id="dhuhr"></p></div>
+  <div class="prayer"><h3>Asr</h3><p id="asr"></p></div>
+  <div class="prayer"><h3>Maghrib</h3><p id="maghrib"></p></div>
+  <div class="prayer"><h3>Isha</h3><p id="isha"></p></div>
+</div>
+
+<script>
+let prayerTimes = {};
+
+async function fetchPrayerTimes() {
+  const res = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Jersey%20City&country=US&method=2");
+  const data = await res.json();
+
+  const t = data.data.timings;
+
+  prayerTimes = {
+    fajr: t.Fajr,
+    dhuhr: t.Dhuhr,
+    asr: t.Asr,
+    maghrib: t.Maghrib,
+    isha: t.Isha
+  };
+
+  for (let key in prayerTimes) {
+    document.getElementById(key).innerText = prayerTimes[key];
+  }
+}
+
+function parseTime(t) {
+  const now = new Date();
+  const [h, m] = t.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0);
+  return d;
+}
+
+function updateCountdown() {
+  if (!prayerTimes.fajr) return;
+
+  const now = new Date();
+  let nextName, nextTime;
+
+  for (let [name, time] of Object.entries(prayerTimes)) {
+    const t = parseTime(time);
+    if (t > now) {
+      nextName = name;
+      nextTime = t;
+      break;
+    }
+  }
+
+  if (!nextTime) {
+    nextName = "fajr";
+    nextTime = parseTime(prayerTimes.fajr);
+    nextTime.setDate(nextTime.getDate() + 1);
+  }
+
+  const diff = nextTime - now;
+
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+
+  document.getElementById("nextPrayer").innerText =
+    "Next Adhan: " + nextName.toUpperCase();
+
+  document.getElementById("timer").innerText =
+    `${h.toString().padStart(2,"0")}:` +
+    `${m.toString().padStart(2,"0")}:` +
+    `${s.toString().padStart(2,"0")}`;
+}
+
+fetchPrayerTimes();
+setInterval(updateCountdown, 1000);
+</script>
+
+</body>
+</html>
