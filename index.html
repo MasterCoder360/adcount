@@ -2,32 +2,61 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Adhan Countdown</title>
+<title>Masjid Display</title>
 
 <style>
 body {
   margin: 0;
-  font-family: Arial;
   background: #0b132b;
   color: white;
+  font-family: 'Segoe UI', sans-serif;
   display: flex;
   flex-direction: column;
   height: 100vh;
 }
 
+/* TOP BAR */
+#top {
+  text-align: center;
+  padding: 20px;
+}
+
+#time {
+  font-size: 5rem;
+}
+
+#date {
+  font-size: 1.5rem;
+  opacity: 0.8;
+}
+
+/* COUNTDOWN */
 #countdown {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  font-size: 4rem;
 }
 
 #nextPrayer {
   font-size: 2rem;
+  margin-bottom: 10px;
 }
 
+#timer {
+  font-size: 6rem;
+  color: #ffd166;
+}
+
+/* IQAMA */
+#iqama {
+  font-size: 2rem;
+  margin-top: 15px;
+  color: #06d6a0;
+}
+
+/* PRAYER ROW */
 #prayers {
   display: flex;
   justify-content: space-around;
@@ -36,37 +65,69 @@ body {
 }
 
 .prayer {
-  background: #3a506b;
-  padding: 15px;
-  border-radius: 10px;
   width: 18%;
+  padding: 15px;
+  border-radius: 12px;
+  background: #3a506b;
   text-align: center;
+  transition: 0.3s;
+}
+
+.prayer.active {
+  background: #ffd166;
+  color: black;
+  transform: scale(1.05);
+}
+
+.prayer h3 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.prayer p {
+  font-size: 2rem;
+  margin-top: 10px;
 }
 </style>
 </head>
 
 <body>
 
+<div id="top">
+  <div id="time"></div>
+  <div id="date"></div>
+</div>
+
 <div id="countdown">
   <div id="nextPrayer">Loading...</div>
   <div id="timer">--:--:--</div>
+  <div id="iqama">Iqama in --:--</div>
 </div>
 
 <div id="prayers">
-  <div class="prayer"><h3>Fajr</h3><p id="fajr"></p></div>
-  <div class="prayer"><h3>Dhuhr</h3><p id="dhuhr"></p></div>
-  <div class="prayer"><h3>Asr</h3><p id="asr"></p></div>
-  <div class="prayer"><h3>Maghrib</h3><p id="maghrib"></p></div>
-  <div class="prayer"><h3>Isha</h3><p id="isha"></p></div>
+  <div class="prayer" id="p_fajr"><h3>Fajr</h3><p id="fajr"></p></div>
+  <div class="prayer" id="p_dhuhr"><h3>Dhuhr</h3><p id="dhuhr"></p></div>
+  <div class="prayer" id="p_asr"><h3>Asr</h3><p id="asr"></p></div>
+  <div class="prayer" id="p_maghrib"><h3>Maghrib</h3><p id="maghrib"></p></div>
+  <div class="prayer" id="p_isha"><h3>Isha</h3><p id="isha"></p></div>
 </div>
 
 <script>
 let prayerTimes = {};
 
-async function fetchPrayerTimes() {
+// ⏱️ IQAMA OFFSETS (minutes after adhan)
+const iqamaOffsets = {
+  fajr: 20,
+  dhuhr: 10,
+  asr: 10,
+  maghrib: 10,
+  isha: 10
+};
+
+// Fetch prayer times
+async function fetchTimes() {
   const res = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Jersey%20City&country=US&method=2");
   const data = await res.json();
-
   const t = data.data.timings;
 
   prayerTimes = {
@@ -77,57 +138,89 @@ async function fetchPrayerTimes() {
     isha: t.Isha
   };
 
-  for (let key in prayerTimes) {
-    document.getElementById(key).innerText = prayerTimes[key];
+  for (let k in prayerTimes) {
+    document.getElementById(k).innerText = prayerTimes[k];
   }
 }
 
-function parseTime(t) {
-  const now = new Date();
-  const [h, m] = t.split(":").map(Number);
+// Helpers
+function toDate(time) {
+  const [h, m] = time.split(":").map(Number);
   const d = new Date();
   d.setHours(h, m, 0);
   return d;
 }
 
-function updateCountdown() {
+function format(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
+}
+
+// Update clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById("time").innerText =
+    now.toLocaleTimeString();
+  document.getElementById("date").innerText =
+    now.toDateString();
+}
+
+// Main logic
+function updateDisplay() {
   if (!prayerTimes.fajr) return;
 
   const now = new Date();
+
   let nextName, nextTime;
 
+  // Clear highlights
+  document.querySelectorAll(".prayer").forEach(p => p.classList.remove("active"));
+
   for (let [name, time] of Object.entries(prayerTimes)) {
-    const t = parseTime(time);
+    const t = toDate(time);
+
     if (t > now) {
       nextName = name;
       nextTime = t;
       break;
     }
+
+    // Highlight current prayer
+    document.getElementById("p_" + name).classList.add("active");
   }
 
   if (!nextTime) {
     nextName = "fajr";
-    nextTime = parseTime(prayerTimes.fajr);
+    nextTime = toDate(prayerTimes.fajr);
     nextTime.setDate(nextTime.getDate() + 1);
   }
 
   const diff = nextTime - now;
 
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  const s = Math.floor((diff % 60000) / 1000);
-
   document.getElementById("nextPrayer").innerText =
-    "Next Adhan: " + nextName.toUpperCase();
+    "Next Prayer: " + nextName.toUpperCase();
 
-  document.getElementById("timer").innerText =
-    `${h.toString().padStart(2,"0")}:` +
-    `${m.toString().padStart(2,"0")}:` +
-    `${s.toString().padStart(2,"0")}`;
+  document.getElementById("timer").innerText = format(diff);
+
+  // IQAMA
+  const iqamaTime = new Date(nextTime.getTime() + iqamaOffsets[nextName] * 60000);
+  const iqamaDiff = iqamaTime - now;
+
+  if (iqamaDiff > 0) {
+    document.getElementById("iqama").innerText =
+      "Iqama in " + format(iqamaDiff);
+  } else {
+    document.getElementById("iqama").innerText =
+      "Iqama started";
+  }
 }
 
-fetchPrayerTimes();
-setInterval(updateCountdown, 1000);
+// Init
+fetchTimes();
+setInterval(updateClock, 1000);
+setInterval(updateDisplay, 1000);
 </script>
 
 </body>
