@@ -115,13 +115,19 @@ body {
 <script>
 let prayerTimes = {};
 
-// ⏱️ IQAMA OFFSETS (minutes after adhan)
+// ⏱️ IQAMA OFFSETS (unchanged for others)
 const iqamaOffsets = {
   fajr: 20,
   dhuhr: 10,
   asr: 10,
   maghrib: 10,
   isha: 10
+};
+
+// ⏰ FIXED IQAMA TIMES (ONLY for fajr & dhuhr)
+const fixedIqama = {
+  fajr: "06:00",
+  dhuhr: "13:30"
 };
 
 // Fetch prayer times
@@ -156,6 +162,14 @@ function format(ms) {
   const m = Math.floor((ms % 3600000) / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
+}
+
+// Get iqama time (ONLY CHANGE)
+function getIqamaTime(name, adhanTime) {
+  if (fixedIqama[name]) {
+    return toDate(fixedIqama[name]);
+  }
+  return new Date(adhanTime.getTime() + iqamaOffsets[name] * 60000);
 }
 
 // Update clock
@@ -204,8 +218,8 @@ function updateDisplay() {
 
   document.getElementById("timer").innerText = format(diff);
 
-  // IQAMA
-  const iqamaTime = new Date(nextTime.getTime() + iqamaOffsets[nextName] * 60000);
+  // IQAMA DISPLAY
+  const iqamaTime = getIqamaTime(nextName, nextTime);
   const iqamaDiff = iqamaTime - now;
 
   if (iqamaDiff > 0) {
