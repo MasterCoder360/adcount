@@ -56,6 +56,17 @@ body {
   color: #06d6a0;
 }
 
+/* FLASH ANIMATION */
+.flash {
+  animation: flashAnim 1s infinite;
+}
+
+@keyframes flashAnim {
+  0% { opacity: 1; color: #ff4d4d; }
+  50% { opacity: 0.2; color: #ffffff; }
+  100% { opacity: 1; color: #ff4d4d; }
+}
+
 /* PRAYER ROW */
 #prayers {
   display: flex;
@@ -112,10 +123,23 @@ body {
   <div class="prayer" id="p_isha"><h3>Isha</h3><p id="isha"></p></div>
 </div>
 
+<!-- 🔊 Beep -->
+<audio id="beep" preload="auto" playsinline></audio>
+
 <script>
 let prayerTimes = {};
+let adhanPlayed = {};
+let iqamaPlayed = {};
+let adhanStartTime = {}; // track flashing start
 
-// ⏱️ IQAMA OFFSETS (unchanged for others)
+function playBeep() {
+  const beep = document.getElementById("beep");
+  beep.currentTime = 0;
+  beep.src = "https://www.soundjay.com/buttons/sounds/beep-07.mp3";
+  beep.play().catch(() => {});
+}
+
+// IQAMA SETTINGS
 const iqamaOffsets = {
   fajr: 20,
   dhuhr: 10,
@@ -124,13 +148,11 @@ const iqamaOffsets = {
   isha: 10
 };
 
-// ⏰ FIXED IQAMA TIMES (ONLY for fajr & dhuhr)
 const fixedIqama = {
   fajr: "06:00",
   dhuhr: "13:30"
 };
 
-// Fetch prayer times
 async function fetchTimes() {
   const res = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Jersey%20City&country=US&method=2");
   const data = await res.json();
@@ -149,7 +171,6 @@ async function fetchTimes() {
   }
 }
 
-// Helpers
 function toDate(time) {
   const [h, m] = time.split(":").map(Number);
   const d = new Date();
@@ -164,45 +185,41 @@ function format(ms) {
   return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
 }
 
-// Get iqama time (ONLY CHANGE)
 function getIqamaTime(name, adhanTime) {
-  if (fixedIqama[name]) {
-    return toDate(fixedIqama[name]);
-  }
+  if (fixedIqama[name]) return toDate(fixedIqama[name]);
   return new Date(adhanTime.getTime() + iqamaOffsets[name] * 60000);
 }
 
-// Update clock
 function updateClock() {
   const now = new Date();
-  document.getElementById("time").innerText =
-    now.toLocaleTimeString();
-  document.getElementById("date").innerText =
-    now.toDateString();
+  document.getElementById("time").innerText = now.toLocaleTimeString();
+  document.getElementById("date").innerText = now.toDateString();
 }
 
-// Main logic
 function updateDisplay() {
   if (!prayerTimes.fajr) return;
 
   const now = new Date();
-
   let nextName, nextTime;
 
-  // Clear highlights
   document.querySelectorAll(".prayer").forEach(p => p.classList.remove("active"));
 
-  for (let [name, time] of Object.entries(prayerTimes)) {
-    const t = toDate(time);
+  const entries = Object.entries(prayerTimes);
 
-    if (t > now) {
+  for (let [name, time] of entries) {
+    const t = toDate(time);
+    const iqamaT = getIqamaTime(name, t);
+
+    if (now >= t && now < iqamaT) {
       nextName = name;
       nextTime = t;
       break;
     }
 
-    // Highlight current prayer
-    document.getElementById("p_" + name).classList.add("active");
+    if (t > now && !nextName) {
+      nextName = name;
+      nextTime = t;
+    }
   }
 
   if (!nextTime) {
@@ -211,27 +228,62 @@ function updateDisplay() {
     nextTime.setDate(nextTime.getDate() + 1);
   }
 
-  const diff = nextTime - now;
+  const adhanTime = nextTime;
+  const iqamaTime = getIqamaTime(nextName, adhanTime);
 
-  document.getElementById("nextPrayer").innerText =
-    "Next Prayer: " + nextName.toUpperCase();
-
-  document.getElementById("timer").innerText = format(diff);
-
-  // IQAMA DISPLAY
-  const iqamaTime = getIqamaTime(nextName, nextTime);
+  const diff = adhanTime - now;
   const iqamaDiff = iqamaTime - now;
 
-  if (iqamaDiff > 0) {
+  document.getElementById("p_" + nextName).classList.add("active");
+
+  // 🔔 ADHAN
+  if (Math.abs(diff) < 1000 && !adhanPlayed[nextName]) {
+    playBeep();
+    adhanPlayed[nextName] = true;
+    adhanStartTime[nextName] = now.getTime();
+  }
+
+  // 🔔 IQAMA
+  if (Math.abs(iqamaDiff) < 1000 && !iqamaPlayed[nextName]) {
+    playBeep();
+    iqamaPlayed[nextName] = true;
+  }
+
+  const nextEl = document.getElementById("nextPrayer");
+
+  // 🔴 ADHAN FLASH (10 sec)
+  if (adhanStartTime[nextName] && (now.getTime() - adhanStartTime[nextName]) < 10000) {
+    nextEl.innerText = "ADHAN NOW";
+    nextEl.classList.add("flash");
+    document.getElementById("timer").innerText = "00:00:00";
+    document.getElementById("iqama").innerText = "";
+    return;
+  } else {
+    nextEl.classList.remove("flash");
+  }
+
+  // BEFORE ADHAN
+  if (diff > 0) {
+    nextEl.innerText = "Next Prayer: " + nextName.toUpperCase();
+    document.getElementById("timer").innerText = format(diff);
     document.getElementById("iqama").innerText =
       "Iqama in " + format(iqamaDiff);
-  } else {
-    document.getElementById("iqama").innerText =
-      "Iqama started";
+  }
+  // AFTER ADHAN → IQAMA MODE
+  else {
+    nextEl.innerText = "IQAMA: " + nextName.toUpperCase();
+    document.getElementById("timer").innerText = "00:00:00";
+
+    if (iqamaDiff > 0) {
+      document.getElementById("iqama").innerText =
+        "Starts in " + format(iqamaDiff);
+    } else {
+      document.getElementById("iqama").innerText =
+        "Iqama started";
+    }
   }
 }
 
-// Init
 fetchTimes();
 setInterval(updateClock, 1000);
 setInterval(updateDisplay, 1000);
